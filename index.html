@@ -14,7 +14,9 @@
                 <div class="logo">BANK</div>
                 <nav class="nav" id="mainNav" style="display: none;">
                     <button onclick="showPage('dashboard')">Dashboard</button>
+                    <button onclick="showPage('loans')">My Loans</button>
                     <button onclick="showPage('profile')">Profile</button>
+                    <button id="adminNavBtn" onclick="showPage('admin')" style="display: none;">Admin Panel</button>
                     <button onclick="logout()">Logout</button>
                 </nav>
             </div>
@@ -101,31 +103,24 @@
 
                 <div id="accountView" style="display: none;">
                     <div class="dashboard-grid">
-                        <!-- Left Side - Account Details -->
                         <div class="account-details-section">
                             <h2 class="section-title">Account Details</h2>
                             <div id="accountDetailsCard" class="account-info-card"></div>
                         </div>
 
-                        <!-- Right Side - Actions -->
                         <div class="actions-section">
                             <h2 class="section-title">Quick Actions</h2>
                             <div class="action-cards">
-                                <div class="action-card" onclick="showTransactionForm('deposit')">
-                                    <div class="action-title">Deposit</div>
-                                    <div class="action-desc">Add money to account</div>
-                                </div>
-                                <div class="action-card" onclick="showTransactionForm('withdraw')">
-                                    <div class="action-title">Withdraw</div>
-                                    <div class="action-desc">Take money out</div>
-                                </div>
                                 <div class="action-card" onclick="showTransactionForm('transfer')">
                                     <div class="action-title">Transfer</div>
                                     <div class="action-desc">Send to another account</div>
                                 </div>
+                                <div class="action-card" onclick="showPage('loans')">
+                                    <div class="action-title">Apply Loan</div>
+                                    <div class="action-desc">Get financial assistance</div>
+                                </div>
                             </div>
 
-                            <!-- Transaction Form Area -->
                             <div id="transactionFormArea" style="display: none;">
                                 <div class="transaction-form-card">
                                     <h3 id="transactionFormTitle"></h3>
@@ -140,17 +135,13 @@
                         </div>
                     </div>
 
-                    <!-- Transactions Section -->
                     <div class="transactions-section">
                         <div class="transactions-header">
                             <h2 class="section-title">Recent Transactions</h2>
                             <div class="filter-buttons">
-                                <!-- Date Filters -->
                                 <button class="filter-btn active" onclick="filterTransactions(7)">Last 7 Days</button>
                                 <button class="filter-btn" onclick="filterTransactions(30)">Last 30 Days</button>
                                 <button class="filter-btn" onclick="filterTransactions(0)">All Time</button>
-
-                                <!-- Transaction Type Dropdown -->
                                 <select id="transactionTypeFilter" onchange="filterByTypeDropdown()">
                                     <option value="">All Types</option>
                                     <option value="DEPOSIT">Deposit</option>
@@ -188,12 +179,131 @@
                 </div>
             </div>
 
+            <!-- Loans Page -->
+            <div id="loansPage" class="page">
+                <h2 class="section-title">My Loans</h2>
+                <button class="btn btn-small" onclick="showLoanApplicationForm()" style="margin-bottom: 20px;">Apply for New Loan</button>
+                
+                <div id="loanApplicationForm" style="display: none;">
+                    <div class="form-card" style="max-width: 600px;">
+                        <h3>Loan Application</h3>
+                        <div id="loanApplicationMessage"></div>
+                        <form onsubmit="handleLoanApplication(event)">
+                            <div class="form-group">
+                                <label>Loan Amount (NPR 10,000 - 50,00,000)</label>
+                                <input type="number" id="loanAmount" min="10000" max="5000000" step="1000" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Interest Rate (% per annum)</label>
+                                <input type="number" id="loanInterestRate" min="5" max="25" step="0.5" value="12" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Loan Term (6-120 months)</label>
+                                <input type="number" id="loanTerm" min="6" max="120" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Purpose</label>
+                                <textarea id="loanPurpose" rows="3" placeholder="Why do you need this loan?"></textarea>
+                            </div>
+                            <button type="submit" class="btn">Submit Application</button>
+                            <button type="button" class="btn btn-secondary" onclick="hideLoanApplicationForm()">Cancel</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="loansList"></div>
+            </div>
+
             <!-- Profile Page -->
             <div id="profilePage" class="page">
                 <h2 class="section-title">My Profile</h2>
                 <div class="profile-grid">
                     <div class="profile-info" id="profileContent"></div>
                     <div class="profile-info" id="profileAccountInfo"></div>
+                </div>
+            </div>
+
+            <!-- ============= ADMIN PANEL ============= -->
+            <div id="adminPage" class="page">
+                <h2 class="section-title">Admin Panel</h2>
+                
+                <div id="adminDashboard">
+                    <div class="dashboard-grid">
+                        <div class="account-details-section">
+                            <h3>System Statistics</h3>
+                            <div id="adminStats"></div>
+                        </div>
+                        <div class="account-details-section">
+                            <h3>Quick Actions</h3>
+                            <div class="action-cards">
+                                <div class="action-card" onclick="showAdminSection('users')">
+                                    <div class="action-title">Manage Users</div>
+                                    <div class="action-desc">View all users</div>
+                                </div>
+                                <div class="action-card" onclick="showAdminSection('accounts')">
+                                    <div class="action-title">Manage Accounts</div>
+                                    <div class="action-desc">Deposit/Withdraw</div>
+                                </div>
+                                <div class="action-card" onclick="showAdminSection('loans')">
+                                    <div class="action-title">Manage Loans</div>
+                                    <div class="action-desc">Approve/Reject</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Users Section -->
+                <div id="adminUsersSection" style="display: none;">
+                    <button class="back-btn" onclick="backToAdminDashboard()">← Back to Admin Dashboard</button>
+                    <h3 class="section-title">All Users</h3>
+                    <div id="adminUsersList"></div>
+                </div>
+
+                <!-- Admin Accounts Section -->
+                <div id="adminAccountsSection" style="display: none;">
+                    <button class="back-btn" onclick="backToAdminDashboard()">← Back to Admin Dashboard</button>
+                    <h3 class="section-title">All Accounts</h3>
+                    <div id="adminAccountsList"></div>
+                </div>
+
+                <!-- Admin Deposit/Withdraw Form -->
+                <div id="adminTransactionForm" style="display: none;">
+                    <button class="back-btn" onclick="hideAdminTransactionForm()">← Back</button>
+                    <div class="form-card" style="max-width: 600px;">
+                        <h3 id="adminTransactionTitle"></h3>
+                        <div id="adminTransactionMessage"></div>
+                        <form onsubmit="handleAdminTransaction(event)">
+                            <div class="form-group">
+                                <label>Account</label>
+                                <input type="text" id="adminTransactionAccount" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Amount</label>
+                                <input type="number" id="adminTransactionAmount" step="0.01" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Description</label>
+                                <textarea id="adminTransactionDescription" rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="btn">Submit</button>
+                            <button type="button" class="btn btn-secondary" onclick="hideAdminTransactionForm()">Cancel</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Admin Loans Section -->
+                <div id="adminLoansSection" style="display: none;">
+                    <button class="back-btn" onclick="backToAdminDashboard()">← Back to Admin Dashboard</button>
+                    <h3 class="section-title">Loan Applications</h3>
+                    <div class="filter-buttons" style="margin-bottom: 20px;">
+                        <button class="filter-btn active" onclick="filterAdminLoans('all')">All</button>
+                        <button class="filter-btn" onclick="filterAdminLoans('PENDING')">Pending</button>
+                        <button class="filter-btn" onclick="filterAdminLoans('ACCEPTED')">Accepted</button>
+                        <button class="filter-btn" onclick="filterAdminLoans('REJECTED')">Rejected</button>
+                        <button class="filter-btn" onclick="filterAdminLoans('PAID')">Paid</button>
+                    </div>
+                    <div id="adminLoansList"></div>
                 </div>
             </div>
         </div>
