@@ -6,7 +6,7 @@ from .views import (
     DepositView, WithdrawalView, TransferView, BalanceEnquiry, 
     LoanView, LoanInterestView,
     AdminDashboardView, AdminUserManagementView, AdminAccountManagementView,
-    AdminLoanManagementView
+    AdminLoanManagementView, request_transaction_pdf, check_pdf_status
 )
 
 urlpatterns = [
@@ -23,9 +23,9 @@ urlpatterns = [
   
     # Transactions
     path('accounts/<int:account_id>/transactions/', TransactionListView.as_view(), name='transaction-list'),
-    path('accounts/<int:account_id>/deposit/', DepositView.as_view(), name='deposit'),  # Admin only
-    path('accounts/<int:account_id>/withdraw/', WithdrawalView.as_view(), name='withdraw'),  # Admin only
-    path('accounts/<int:account_id>/transfer/', TransferView.as_view(), name='transfer'),  # User
+    path('accounts/<int:account_id>/deposit/', DepositView.as_view(), name='deposit'),  
+    path('accounts/<int:account_id>/withdraw/', WithdrawalView.as_view(), name='withdraw'), 
+    path('accounts/<int:account_id>/transfer/', TransferView.as_view(), name='transfer'), 
     
     # Loans
     path('loans/', LoanView.as_view(), name='loan-list'),  # Get all user loans
@@ -39,4 +39,7 @@ urlpatterns = [
     path('admin/accounts/', AdminAccountManagementView.as_view(), name='admin-accounts'),
     path('admin/loans/', AdminLoanManagementView.as_view(), name='admin-loans'),
     path('admin/loans/<int:loan_id>/', AdminLoanManagementView.as_view(), name='admin-loan-action'),
+
+    path("download-pdf/", request_transaction_pdf, name="request_pdf_download"),
+    path("check-pdf-status/<str:task_id>/", check_pdf_status, name="check_pdf_status"),
 ]

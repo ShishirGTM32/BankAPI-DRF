@@ -90,22 +90,19 @@ class Loan(models.Model):
         decimal_places=2,
         validators=[
             MinValueValidator(Decimal('10000.00')),
-            MaxValueValidator(Decimal('5000000.00'))  # Max 50 Lakh NPR
+            MaxValueValidator(Decimal('5000000.00'))  
         ]
     )
-    interest_rate = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2, 
-        default=12.00,
+    interest_rate = models.DecimalField( max_digits=5,decimal_places=2, default=12.00,
         validators=[
             MinValueValidator(Decimal('5.00')),
             MaxValueValidator(Decimal('25.00'))
         ]
-    )  # Annual interest rate
+    ) 
     loan_term_months = models.IntegerField(
         validators=[
             MinValueValidator(6),
-            MaxValueValidator(120)  # Max 10 years
+            MaxValueValidator(120) 
         ]
     )
     monthly_payment = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
@@ -118,12 +115,6 @@ class Loan(models.Model):
     purpose = models.TextField(blank=True, null=True, help_text="Purpose of the loan")
     
     def calculate_monthly_payment(self):
-        """
-        Calculate EMI using formula: P * r * (1+r)^n / ((1+r)^n - 1)
-        P = Principal loan amount
-        r = Monthly interest rate (annual rate / 12 / 100)
-        n = Number of months
-        """
         if self.interest_rate > 0 and self.loan_term_months > 0:
             principal = float(self.loan_amount)
             monthly_rate = (float(self.interest_rate) / 100) / 12
@@ -135,17 +126,14 @@ class Loan(models.Model):
         return Decimal('0.00')
     
     def total_payable(self):
-        """Calculate total amount to be paid"""
         return self.monthly_payment * self.loan_term_months
     
     def remaining_amount(self):
-        """Calculate remaining loan amount"""
         paid = sum(float(payment.amount) for payment in self.payments.all())
         total = float(self.total_payable())
         return max(Decimal(str(total - paid)), Decimal('0.00'))
     
     def total_paid(self):
-        """Calculate total amount paid so far"""
         return sum(float(payment.amount) for payment in self.payments.all())
     
     def save(self, *args, **kwargs):
@@ -169,3 +157,4 @@ class LoanInterest(models.Model):
     
     def __str__(self):
         return f"Payment for Loan #{self.loan.loan_id} - NPR {self.amount}"
+    

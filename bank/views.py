@@ -4,19 +4,24 @@ from rest_framework import status, generics, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView    
 from rest_framework.authtoken.models import Token
+from django.http import JsonResponse, FileResponse
+from celery.result import AsyncResult
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import login
 from django.utils import timezone
 from datetime import timedelta
-from .models import CustomUser, Account, Transaction, Loan, LoanInterest
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from .models import CustomUser, Account, Transaction, Loan
 from .permissions import IsAdminUser
+from .tasks import send_transaction_email, send_transfer_email, welcome_user, generate_transaction_pdf, loan_accepted
 from .serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserSerializer,
     AccountSerializer, TransactionSerializer, LoanSerializer, LoanInterestSerializer
 )
 
-# ============= AUTHENTICATION VIEWS =============
+
 class UserRegistrationView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
@@ -25,8 +30,9 @@ class UserRegistrationView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        print(user.email)
         token, created = Token.objects.get_or_create(user=user)
-        
+        welcome_user.delay(user.email)
         return Response({
             'user': UserSerializer(user).data,
             'token': token.key,
@@ -66,7 +72,6 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user
 
-# ============= ACCOUNT VIEWS =============
 class AccountListCreateView(generics.ListCreateAPIView):
     serializer_class = AccountSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -84,7 +89,6 @@ class AccountDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return Account.objects.filter(user=self.request.user)
 
-# ============= TRANSACTION VIEWS =============
 class TransactionListView(generics.ListAPIView):
     serializer_class = TransactionSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -112,9 +116,7 @@ class BalanceEnquiry(generics.RetrieveAPIView):
         account = self.get_object()
         return Response({"balance": account.balance}, status=status.HTTP_200_OK)
 
-# ============= ADMIN ONLY: DEPOSIT & WITHDRAWAL =============
 class DepositView(APIView):
-    """ADMIN ONLY - Deposit money to any account"""
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
 
     @transaction.atomic
@@ -140,10 +142,12 @@ class DepositView(APIView):
             status='COMPLETED'
         )
 
+        transaction.on_commit(
+            lambda: send_transaction_email.delay(account.user.username, amount, trans.transaction_type, trans.description)
+        )
         return Response(TransactionSerializer(trans).data, status=status.HTTP_201_CREATED)
 
 class WithdrawalView(APIView):
-    """ADMIN ONLY - Withdraw money from any account"""
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
 
     @transaction.atomic
@@ -162,7 +166,6 @@ class WithdrawalView(APIView):
 
         account.balance -= Decimal(amount)
         account.save()
-
         trans = Transaction.objects.create(
             account=account,
             transaction_type='WITHDRAWAL',
@@ -171,12 +174,15 @@ class WithdrawalView(APIView):
             description=request.data.get('description', 'Admin withdrawal'),
             status='COMPLETED'
         )
+
+        transaction.on_commit(
+            lambda: send_transaction_email.delay(account.user.username, amount, trans.transaction_type, trans.description)
+        )
     
         return Response(TransactionSerializer(trans).data, status=status.HTTP_201_CREATED)
 
-# ============= USER: TRANSFER =============
 class TransferView(APIView):
-    """USER - Transfer money between accounts"""
+    
     permission_classes = [permissions.IsAuthenticated]
     
     @transaction.atomic
@@ -221,12 +227,12 @@ class TransferView(APIView):
             recipient_account=recipient_account,
             status='COMPLETED'
         )
-
+        transaction.on_commit(
+            lambda:send_transfer_email(amount, trans.transaction_type, account.user.username, recipient_account.user.username, trans.description)
+        )
         return Response(TransactionSerializer(trans).data, status=status.HTTP_201_CREATED)
 
-# ============= LOAN VIEWS (USER) =============
 class LoanView(APIView):
-    """USER - View and apply for loans"""
     permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request, account_id=None):
@@ -246,13 +252,13 @@ class LoanView(APIView):
         except Account.DoesNotExist:
             return Response({'error': 'Account not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Check loan limits - Max 3 active loans
         active_loans = Loan.objects.filter(
             borrower=account,
             status__in=['PENDING', 'ACCEPTED']
         ).count()
+
         
-        if active_loans >= 3:
+        if active_loans >= 2:
             return Response(
                 {'error': 'Maximum loan limit reached. You can have up to 3 active loans.'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -261,11 +267,12 @@ class LoanView(APIView):
         serializer = LoanSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(borrower_id=account_id)
+        loan_accepted.delay(serializer.instance.loan_id,request.user.username)
+        
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class LoanInterestView(APIView):
-    """USER - Make loan payment"""
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, account_id, loan_id):
@@ -315,7 +322,6 @@ class LoanInterestView(APIView):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-# ============= ADMIN VIEWS =============
 class AdminDashboardView(APIView):
     """ADMIN - Dashboard statistics"""
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
@@ -391,13 +397,15 @@ class AdminLoanManagementView(APIView):
     def put(self, request, loan_id):
         """Approve or reject loan"""
         loan = get_object_or_404(Loan, loan_id=loan_id)
-        action = request.data.get('action')  # 'accept' or 'reject'
+        action = request.data.get('action') 
         
         if action == 'accept':
             loan.status = 'ACCEPTED'
             loan.is_accepted = True
             loan.accepted_date = timezone.now()
             loan.next_payment_date = timezone.now().date() + timedelta(days=30)
+            user = loan.borrower.user.username
+            loan_accepted.delay(loan.loan_id, user)
             loan.save()
             return Response(
                 {"message": "Loan accepted successfully", "loan": LoanSerializer(loan).data},
@@ -416,3 +424,19 @@ class AdminLoanManagementView(APIView):
                 {"error": "Invalid action. Use 'accept' or 'reject'"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def request_transaction_pdf(request):
+    print(request.user)
+    task = generate_transaction_pdf.apply_async(args=[request.user.id])
+    return JsonResponse({"task_id": task.id})
+
+
+def check_pdf_status(request, task_id):
+    result = AsyncResult(task_id)
+    if result.ready():
+        filename = result.get()
+        return FileResponse(open(filename, "rb"), as_attachment=True, filename="transactions.pdf")
+    return JsonResponse({"status": "pending"})

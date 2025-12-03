@@ -65,7 +65,7 @@ class LoanSerializer(serializers.ModelSerializer):
             'loan_id', 'borrower', 'borrower_name', 'loan_amount', 'interest_rate', 
             'loan_term_months', 'monthly_payment', 'status', 'is_accepted', 
             'applied_date', 'accepted_date', 'next_payment_date', 'last_payment_date',
-            'purpose', 'total_payable', 'remaining_amount', 'total_paid'
+        'purpose', 'total_payable', 'remaining_amount', 'total_paid'
         ]
         read_only_fields = ['loan_id', 'monthly_payment', 'status', 'is_accepted', 'applied_date', 'accepted_date', 'borrower']
     
