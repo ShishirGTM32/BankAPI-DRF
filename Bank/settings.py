@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'bank.apps.BankConfig',
     'rest_framework',
     'rest_framework.authtoken',
+    'django_celery_beat',
     'corsheaders'
 ]
 
@@ -129,7 +130,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
-    ],
+    ],  
 }
 
 CORS_ALLOW_CREDENTIALS = True
@@ -160,7 +161,8 @@ CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'Asia/Kathmandu'
+CELERY_ENABLE_UTC= True
+CELERY_TIMEZONE = 'UTC'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

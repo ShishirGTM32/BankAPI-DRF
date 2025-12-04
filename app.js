@@ -142,7 +142,6 @@ async function logout() {
     showPage('login');
 }
 
-// --- Dashboard ---
 async function loadDashboard() {
     if (!authToken) return;
     try {
@@ -602,6 +601,34 @@ async function makeLoanPayment(loanId, amount) {
         alert('Payment failed');
     }
 }
+
+document.getElementById("downloadTransactionsBtn").addEventListener("click", async () => {
+  try {
+    const res = await fetch(`${API_URL}/download-pdf/`, {
+      headers: { 'Authorization': `Token ${authToken}` }
+    });
+    const { task_id } = await res.json();
+    let status;
+    do {
+      const check = await fetch(`${API_URL}/check-pdf-status/${task_id}/`, {
+        headers: { 'Authorization': `Token ${authToken}` }
+      });
+
+      if (check.headers.get("Content-Type") === "application/pdf") {
+        window.location.href = `${API_URL}/check-pdf-status/${task_id}/`;
+        break;
+      }
+
+      const data = await check.json();
+      status = data.status;
+      await new Promise(r => setTimeout(r, 3000));
+    } while (status === "pending");
+  } catch (err) {
+    console.error("Download failed", err);
+  }
+});
+
+
 
 async function loadAdminDashboard() {
     if (!isAdmin) {

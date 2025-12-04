@@ -15,7 +15,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from .models import CustomUser, Account, Transaction, Loan
 from .permissions import IsAdminUser
-from .tasks import send_transaction_email, send_transfer_email, welcome_user, generate_transaction_pdf, loan_accepted
+from .tasks import send_transaction_email, send_transfer_email, welcome_user, generate_transaction_pdf, loan_accepted, loan_payment_interest
 from .serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserSerializer,
     AccountSerializer, TransactionSerializer, LoanSerializer, LoanInterestSerializer
@@ -30,7 +30,6 @@ class UserRegistrationView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        print(user.email)
         token, created = Token.objects.get_or_create(user=user)
         welcome_user.delay(user.email)
         return Response({
@@ -95,7 +94,8 @@ class TransactionListView(generics.ListAPIView):
 
     def get_queryset(self):
         account_id = self.kwargs.get('account_id')
-        queryset = Transaction.objects.filter(account_id=account_id)
+        day = timezone.now()-timedelta(days=1)
+        queryset = Transaction.objects.filter(account_id=account_id, created_at__gte = day)[:10]
         transaction_type = self.request.query_params.get('type')
         if transaction_type:
             queryset = queryset.filter(transaction_type=transaction_type.upper())
@@ -302,10 +302,9 @@ class LoanInterestView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Update last payment date
-        loan.last_payment_date = timezone.now().date()
+        if not loan.remaining_amount == 0:
+            loan.last_payment_date = timezone.now().date()
         
-        # Set next payment date (30 days from now)
         if not loan.next_payment_date:
             loan.next_payment_date = timezone.now().date() + timedelta(days=30)
         else:
@@ -313,12 +312,14 @@ class LoanInterestView(APIView):
         
         loan.save()
         
+        
         serializer.save(loan=loan)
 
-        # Check if loan is fully paid
         if loan.remaining_amount() <= 0:
             loan.status = "PAID"
+            loan.next_payment_date = None
             loan.save()
+        loan_payment_interest.delay(loan.loan_id, serializer.instance.id)
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -368,7 +369,6 @@ class AdminUserManagementView(APIView):
         )
 
 class AdminAccountManagementView(APIView):
-    """ADMIN - View all accounts"""
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
     
     def get(self, request):
@@ -377,7 +377,6 @@ class AdminAccountManagementView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class AdminLoanManagementView(APIView):
-    """ADMIN - Manage loans - view, approve, reject"""
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
     
     def get(self, request, loan_id=None):
@@ -395,7 +394,6 @@ class AdminLoanManagementView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def put(self, request, loan_id):
-        """Approve or reject loan"""
         loan = get_object_or_404(Loan, loan_id=loan_id)
         action = request.data.get('action') 
         
@@ -429,7 +427,6 @@ class AdminLoanManagementView(APIView):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def request_transaction_pdf(request):
-    print(request.user)
     task = generate_transaction_pdf.apply_async(args=[request.user.id])
     return JsonResponse({"task_id": task.id})
 

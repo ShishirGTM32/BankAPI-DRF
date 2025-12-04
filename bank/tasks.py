@@ -8,6 +8,7 @@ from django.db.models.functions import TruncDate
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from weasyprint import HTML
+from datetime import timedelta
 
 def load_email_template(filename):
     path = os.path.join(settings.BASE_DIR, filename)
@@ -16,9 +17,12 @@ def load_email_template(filename):
 
 @shared_task
 def welcome_user(email):
+    user = CustomUser.objects.get(email=email)
     from_email = settings.EMAIL_HOST_USER
     subject = "Thanks for registration"
-    content  = load_email_template("welcome.html")
+    content  = load_email_template("welcome.html").format(
+        user=user.username
+    )
     email = EmailMessage(
         subject,
         content,
@@ -150,5 +154,74 @@ def loan_accepted(loan, user):
         email.content_subtype = "Plain"
         email.send()
 
+@shared_task
+def loan_payment_due():
+    loans = Loan.objects.filter(status="ACCEPTED")
+    payment_due = timezone.now().date() + timedelta(days=28)
+    for loan in loans:
+        if (loan.next_payment_date - payment_due).days <= 2 :
+            content = load_email_template("payment_due.html").format(
+                uname = loan.borrower.user.username,
+                date = loan.next_payment_date,
+                amt = loan.monthly_payment
+            )
 
+            subject = "Loan Payment Due"
+            from_email = settings.EMAIL_HOST_USER
+            to = [loan.borrower.user.email]
+            email = EmailMessage(
+                subject,
+                content,
+                from_email,
+                to
+            )
 
+            email.content_subtype = "html"
+            email.send()
+
+@shared_task
+def loan_paid():
+    today = timezone.now().date()
+    loans = Loan.objects.filter(last_payment_date=today, status="PAID")
+    from_email = settings.EMAIL_HOST_USER
+    subject = "Loan Successfully Paid"
+    for loan in loans:
+        to = [loan.borrower.user.email]
+        content = load_email_template("loan_paid.html").format(
+            user = loan.borrower.user.username,
+            amt = loan.loan_amount
+        )
+        email = EmailMessage(
+            subject,
+            content,
+            from_email,
+            to
+        )
+        email.content_subtype = "html"
+        email.send()
+
+@shared_task
+def loan_payment_interest(loan, int_id):
+    loan = Loan.objects.get(loan_id=loan)
+    loanint = LoanInterest.objects.get(id=int_id)
+    remaining = loan.remaining_amount()
+    content = load_email_template("loan_interest.html").format(
+        uname=loan.borrower.user.username,
+        loanid = loan.loan_id,
+        ant = loan.loan_amount,
+        amt= loanint.amount,
+        remain = remaining,
+        due = loan.next_payment_date
+    )
+    subject = "Loan Interest Recieved"
+    to = [loan.borrower.user.email]
+    from_email = settings.EMAIL_HOST_USER
+    email = EmailMessage(
+        subject,
+        content,
+        from_email,
+        to
+    )
+    email.content_subtype= "html"
+    email.send()
+    

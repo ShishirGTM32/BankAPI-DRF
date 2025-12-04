@@ -16,12 +16,12 @@ def debug_task(self):
     print(f'Request: {self.request!r}')
 
 app.conf.beat_schedule = {
-    'send-report-every-midnight': {
-        'task': 'project.tasks.send_report',
-        'schedule': crontab(hour=0, minute=0),  # every midnight
+    'loan-payment-due-mail': {
+        'task': 'bank.tasks.loan_payment_due',
+        'schedule': crontab(hour=6, minute=46)
     },
-    'cleanup-every-30-minutes': {
-        'task': 'project.tasks.cleanup',
-        'schedule': timedelta(minutes=30),
-    },
+    'loan_paid':{
+        'task': 'bank.tasks.loan_paid',
+        'schedule': crontab(hour=6, minute=46)
+    }
 }

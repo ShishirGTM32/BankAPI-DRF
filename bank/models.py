@@ -148,7 +148,7 @@ class LoanInterest(models.Model):
     loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name='payments')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     payment_date = models.DateTimeField(auto_now_add=True)
-    payment_method = models.CharField(max_length=50, default='Online Transfer')
+    payment_method = models.CharField(max_length=50, default='Cash')
     notes = models.TextField(blank=True)
     transaction_id = models.CharField(max_length=50, blank=True, null=True)
     

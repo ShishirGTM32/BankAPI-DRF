@@ -28,7 +28,7 @@ urlpatterns = [
     path('accounts/<int:account_id>/transfer/', TransferView.as_view(), name='transfer'), 
     
     # Loans
-    path('loans/', LoanView.as_view(), name='loan-list'),  # Get all user loans
+    path('loans/', LoanView.as_view(), name='loan-list'), 
     path('accounts/<int:account_id>/loan/', LoanView.as_view(), name='loan-create'),
     path('accounts/<int:account_id>/loan/<int:loan_id>/payment/', LoanInterestView.as_view(), name="loan-payment"), 
     
