@@ -43,7 +43,7 @@ class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = ['id', 'user', 'account_number', 'account_type', 'balance', 'currency', 'is_active', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'account_number', 'balance', 'created_at', 'updated_at', 'is_active']
+        read_only_fields = ['id', 'account_number', 'created_at', 'updated_at', 'is_active']
 
 class TransactionSerializer(serializers.ModelSerializer):
     recipient_account_number = serializers.CharField(source='recipient_account.account_number', read_only=True)

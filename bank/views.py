@@ -70,16 +70,47 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+    
 
-class AccountListCreateView(generics.ListCreateAPIView):
-    serializer_class = AccountSerializer
-    permission_classes = [permissions.IsAuthenticated]
+#use of generics view 
+# class AccountListCreateView(generics.ListCreateAPIView):
+#     serializer_class = AccountSerializer
+#     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        return Account.objects.filter(user=self.request.user, is_active=True)
+#     def get_queryset(self):
+#         return Account.objects.filter(user=self.request.user, is_active=True)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+#     def perform_create(self, serializer):
+#         print(serializer.data)
+#         if serializer.data['balance'] < 1000:
+#             return Response("Invalid amount min balance 1000", status=status.HTTP_400_BAD_REQUEST)
+#         serializer.save(user=self.request.user)
+
+
+#use of API view
+class AccountListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+
+    def get(self, request):
+        account = Account.objects.filter(user=self.request.user, is_active=True)
+        serialzer = AccountSerializer(account, many=True)
+        return Response(serialzer.data, status=status.HTTP_200_OK)
+    
+
+    def post(self, request):
+        acc = Account.objects.filter(user__username=request.user.username)
+        if acc:     
+            return Response("Invalid. 1 account 1 user", status=status.HTTP_400_BAD_REQUEST)
+        datas = request.data
+        if int(datas['balance'])<1000:
+            return Response("Min account balance is 1000", status=status.HTTP_400_BAD_REQUEST)
+        serializer = AccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        cuser = CustomUser.objects.get(id=self.request.user.id)
+        serializer.save(user=cuser)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+        
 
 class AccountDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AccountSerializer
@@ -87,6 +118,7 @@ class AccountDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Account.objects.filter(user=self.request.user)
+    
 
 class TransactionListView(generics.ListAPIView):
     serializer_class = TransactionSerializer
@@ -246,7 +278,6 @@ class LoanView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def post(self, request, account_id):
-        """Apply for a new loan"""
         try:
             account = Account.objects.get(id=account_id, user=request.user)
         except Account.DoesNotExist:
@@ -340,7 +371,6 @@ class AdminDashboardView(APIView):
         return Response(stats, status=status.HTTP_200_OK)
 
 class AdminUserManagementView(APIView):
-    """ADMIN - Manage all users"""
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
     
     def get(self, request, user_id=None):
@@ -367,6 +397,7 @@ class AdminUserManagementView(APIView):
             {"message": f"User '{username}' deleted successfully"},
             status=status.HTTP_200_OK
         )
+
 
 class AdminAccountManagementView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]

@@ -11,19 +11,20 @@ let isAdmin = false;
 let adminTransactionAccountId = null;
 let adminTransactionType = null;
 
+
 window.onload = function () {
     const storedToken = localStorage.getItem("authToken");
     const storedIsAdmin = localStorage.getItem("isAdmin") === 'true';
-    
+
     if (storedToken) {
         authToken = storedToken;
         isAdmin = storedIsAdmin;
         document.getElementById('mainNav').style.display = 'flex';
-        
+
         if (isAdmin) {
             document.getElementById('adminNavBtn').style.display = 'block';
         }
-        
+
         showPage('dashboard');
     } else {
         showPage('login');
@@ -76,11 +77,11 @@ async function handleRegister(e) {
             localStorage.setItem("authToken", authToken);
             localStorage.setItem("isAdmin", isAdmin);
             document.getElementById('mainNav').style.display = 'flex';
-            
+
             if (isAdmin) {
                 document.getElementById('adminNavBtn').style.display = 'block';
             }
-            
+
             showMessage('registerMessage', 'Registration successful!', 'success');
             setTimeout(() => showPage('createAccount'), 1000);
         } else {
@@ -111,11 +112,11 @@ async function handleLogin(e) {
             localStorage.setItem("authToken", authToken);
             localStorage.setItem("isAdmin", isAdmin);
             document.getElementById('mainNav').style.display = 'flex';
-            
+
             if (isAdmin) {
                 document.getElementById('adminNavBtn').style.display = 'block';
             }
-            
+
             showPage('dashboard');
         } else {
             showMessage('loginMessage', 'Invalid credentials', 'error');
@@ -131,7 +132,7 @@ async function logout() {
             method: 'POST',
             headers: { 'Authorization': `Token ${authToken}` }
         });
-    } catch (err) {}
+    } catch (err) { }
     localStorage.removeItem("authToken");
     localStorage.removeItem("isAdmin");
     authToken = null;
@@ -198,13 +199,12 @@ async function loadTransactions(accountId) {
         const data = await res.json();
         if (res.ok) {
             allTransactions = data.map(t => {
-                // Use recipient_account_number if backend returns object
                 if (t.recipient_account && typeof t.recipient_account === 'object') {
                     t.recipient_account_number = t.recipient_account.account_number || '';
                 }
                 return t;
             });
-            renderTransactions();
+            renderTransactions(accountId);
         } else {
             document.getElementById("dashboardTransactionsList").innerHTML = "<p>No transactions</p>";
         }
@@ -214,7 +214,7 @@ async function loadTransactions(accountId) {
     }
 }
 
-function renderTransactions() {
+function renderTransactions(accountId) {
     let filtered = allTransactions;
 
     if (currentFilterDays > 0) {
@@ -242,7 +242,7 @@ function renderTransactions() {
                 <div class="transaction-desc">${new Date(t.created_at).toLocaleString()}</div>
             </div>
             <div class="transaction-amount ${t.transaction_type.toLowerCase()}">
-                ${t.transaction_type === 'DEPOSIT' ? '+' : '-'}${parseFloat(t.amount).toFixed(2)}
+                ${t.transaction_type === 'DEPOSIT' ? '+' : t.transaction_type === 'TRANSFER' ? (t.recipient_account === accountId ? '+' : '-') : '-'}${parseFloat(t.amount).toFixed(2)}
             </div>
         </div>
         `;
@@ -347,7 +347,8 @@ async function handleCreateAccount(e) {
     e.preventDefault();
     const data = {
         account_type: document.getElementById('accountType').value,
-        currency: document.getElementById('accountCurrency').value
+        currency: document.getElementById('accountCurrency').value,
+        balance: document.getElementById('accountBalance').value
     };
     try {
         const res = await fetch(`${API_URL}/accounts/`, {
@@ -408,43 +409,43 @@ function hideLoanApplicationForm() {
 
 async function handleLoanApplication(e) {
     e.preventDefault();
-    
+
     if (!currentAccount) {
         showMessage('loanApplicationMessage', 'No account found. Please create an account first.', 'error');
         return;
     }
-    
+
     // Parse values to ensure correct types
     const loanAmount = parseFloat(document.getElementById('loanAmount').value);
     const interestRate = parseFloat(document.getElementById('loanInterestRate').value);
     const loanTermMonths = parseInt(document.getElementById('loanTerm').value);
     const purpose = document.getElementById('loanPurpose').value.trim();
-    
+
     // Validate ranges
     if (loanAmount < 10000 || loanAmount > 5000000) {
         showMessage('loanApplicationMessage', 'Loan amount must be between NPR 10,000 and NPR 50,00,000', 'error');
         return;
     }
-    
+
     if (interestRate < 5 || interestRate > 25) {
         showMessage('loanApplicationMessage', 'Interest rate must be between 5% and 25%', 'error');
         return;
     }
-    
+
     if (loanTermMonths < 6 || loanTermMonths > 120) {
         showMessage('loanApplicationMessage', 'Loan term must be between 6 and 120 months', 'error');
         return;
     }
-    
+
     const data = {
         loan_amount: loanAmount.toString(),
         interest_rate: interestRate.toString(),
         loan_term_months: loanTermMonths,
         purpose: purpose || ''
     };
-    
+
     console.log('Submitting loan application:', data);
-    
+
     try {
         const res = await fetch(`${API_URL}/accounts/${currentAccount.id}/loan/`, {
             method: 'POST',
@@ -454,10 +455,10 @@ async function handleLoanApplication(e) {
             },
             body: JSON.stringify(data)
         });
-        
+
         const result = await res.json();
         console.log('Loan application response:', result);
-        
+
         if (res.ok) {
             showMessage('loanApplicationMessage', 'Loan application submitted successfully!', 'success');
             document.getElementById('loanAmount').value = '';
@@ -482,23 +483,23 @@ async function handleLoanApplication(e) {
 
 async function loadUserLoans() {
     if (!authToken) return;
-    
+
     try {
         const res = await fetch(`${API_URL}/loans/`, {
             headers: { 'Authorization': `Token ${authToken}` }
         });
-        
+
         const loans = await res.json();
         const container = document.getElementById('loansList');
-        
+
         if (!loans || loans.length === 0) {
             container.innerHTML = '<div class="empty-message">No loans found. Apply for your first loan!</div>';
             return;
         }
-        
+
         container.innerHTML = loans.map(loan => {
             const statusClass = loan.status.toLowerCase();
-            
+
             return `
                 <div class="account-details-section" style="margin-bottom: 20px;">
                     <div class="info-row">
@@ -574,7 +575,7 @@ function showLoanPaymentForm(loanId, remainingAmount) {
 
 async function makeLoanPayment(loanId, amount) {
     if (!currentAccount) return;
-    
+
     try {
         const res = await fetch(`${API_URL}/accounts/${currentAccount.id}/loan/${loanId}/payment/`, {
             method: 'POST',
@@ -587,9 +588,9 @@ async function makeLoanPayment(loanId, amount) {
                 payment_method: 'Online Transfer'
             })
         });
-        
+
         const result = await res.json();
-        
+
         if (res.ok) {
             alert('Payment successful!');
             loadUserLoans();
@@ -603,31 +604,30 @@ async function makeLoanPayment(loanId, amount) {
 }
 
 document.getElementById("downloadTransactionsBtn").addEventListener("click", async () => {
-  try {
-    const res = await fetch(`${API_URL}/download-pdf/`, {
-      headers: { 'Authorization': `Token ${authToken}` }
-    });
-    const { task_id } = await res.json();
-    let status;
-    do {
-      const check = await fetch(`${API_URL}/check-pdf-status/${task_id}/`, {
-        headers: { 'Authorization': `Token ${authToken}` }
-      });
+    try {
+        const res = await fetch(`${API_URL}/download-pdf/`, {
+            headers: { 'Authorization': `Token ${authToken}` }
+        });
+        const { task_id } = await res.json();
+        let status;
+        do {
+            const check = await fetch(`${API_URL}/check-pdf-status/${task_id}/`, {
+                headers: { 'Authorization': `Token ${authToken}` }
+            });
 
-      if (check.headers.get("Content-Type") === "application/pdf") {
-        window.location.href = `${API_URL}/check-pdf-status/${task_id}/`;
-        break;
-      }
+            if (check.headers.get("Content-Type") === "application/pdf") {
+                window.location.href = `${API_URL}/check-pdf-status/${task_id}/`;
+                break;
+            }
 
-      const data = await check.json();
-      status = data.status;
-      await new Promise(r => setTimeout(r, 3000));
-    } while (status === "pending");
-  } catch (err) {
-    console.error("Download failed", err);
-  }
+            const data = await check.json();
+            status = data.status;
+            await new Promise(r => setTimeout(r, 3000));
+        } while (status === "pending");
+    } catch (err) {
+        console.error("Download failed", err);
+    }
 });
-
 
 
 async function loadAdminDashboard() {
@@ -635,21 +635,21 @@ async function loadAdminDashboard() {
         showPage('dashboard');
         return;
     }
-    
+
     // Show dashboard, hide sections
     document.getElementById('adminDashboard').style.display = 'block';
     document.getElementById('adminUsersSection').style.display = 'none';
     document.getElementById('adminAccountsSection').style.display = 'none';
     document.getElementById('adminLoansSection').style.display = 'none';
     document.getElementById('adminTransactionForm').style.display = 'none';
-    
+
     try {
         const res = await fetch(`${API_URL}/admin/dashboard/`, {
             headers: { 'Authorization': `Token ${authToken}` }
         });
-        
+
         const stats = await res.json();
-        
+
         document.getElementById('adminStats').innerHTML = `
             <div class="info-row">
                 <span class="info-label">Total Users</span>
@@ -687,7 +687,7 @@ function backToAdminDashboard() {
 
 async function showAdminSection(section) {
     document.getElementById('adminDashboard').style.display = 'none';
-    
+
     if (section === 'users') {
         document.getElementById('adminUsersSection').style.display = 'block';
         loadAdminUsers();
@@ -705,10 +705,10 @@ async function loadAdminUsers() {
         const res = await fetch(`${API_URL}/admin/users/`, {
             headers: { 'Authorization': `Token ${authToken}` }
         });
-        
+
         const users = await res.json();
         const container = document.getElementById('adminUsersList');
-        
+
         container.innerHTML = users.map(user => `
             <div class="account-details-section" style="margin-bottom: 15px;">
                 <div class="info-row">
@@ -743,10 +743,10 @@ async function loadAdminAccounts() {
         const res = await fetch(`${API_URL}/admin/accounts/`, {
             headers: { 'Authorization': `Token ${authToken}` }
         });
-        
+
         const accounts = await res.json();
         const container = document.getElementById('adminAccountsList');
-        
+
         container.innerHTML = accounts.map(account => `
             <div class="account-details-section" style="margin-bottom: 15px;">
                 <div class="info-row">
@@ -779,7 +779,7 @@ async function loadAdminAccounts() {
 function showAdminTransactionForm(type, accountId, accountNumber) {
     adminTransactionAccountId = accountId;
     adminTransactionType = type;
-    
+
     document.getElementById('adminAccountsSection').style.display = 'none';
     document.getElementById('adminTransactionForm').style.display = 'block';
     document.getElementById('adminTransactionTitle').textContent = type === 'deposit' ? 'Deposit Money' : 'Withdraw Money';
@@ -796,12 +796,12 @@ function hideAdminTransactionForm() {
 
 async function handleAdminTransaction(e) {
     e.preventDefault();
-    
+
     const amount = document.getElementById('adminTransactionAmount').value;
     const description = document.getElementById('adminTransactionDescription').value;
-    
+
     const endpoint = adminTransactionType === 'deposit' ? 'deposit' : 'withdraw';
-    
+
     try {
         const res = await fetch(`${API_URL}/accounts/${adminTransactionAccountId}/${endpoint}/`, {
             method: 'POST',
@@ -811,9 +811,9 @@ async function handleAdminTransaction(e) {
             },
             body: JSON.stringify({ amount, description })
         });
-        
+
         const result = await res.json();
-        
+
         if (res.ok) {
             showMessage('adminTransactionMessage', 'Transaction successful!', 'success');
             setTimeout(() => {
@@ -835,19 +835,19 @@ async function loadAdminLoans(statusFilter) {
         if (statusFilter && statusFilter !== 'all') {
             url += `?status=${statusFilter}`;
         }
-        
+
         const res = await fetch(url, {
             headers: { 'Authorization': `Token ${authToken}` }
         });
-        
+
         const loans = await res.json();
         const container = document.getElementById('adminLoansList');
-        
+
         if (!loans || loans.length === 0) {
             container.innerHTML = '<div class="empty-message">No loans found</div>';
             return;
         }
-        
+
         container.innerHTML = loans.map(loan => `
             <div class="account-details-section" style="margin-bottom: 20px;">
                 <div class="info-row">
@@ -925,12 +925,12 @@ async function loadAdminLoans(statusFilter) {
 
 
 async function handleLoanAction(loanId, action) {
-    const confirmMsg = action === 'accept' ? 
-        'Are you sure you want to approve this loan?' : 
+    const confirmMsg = action === 'accept' ?
+        'Are you sure you want to approve this loan?' :
         'Are you sure you want to reject this loan?';
-    
+
     if (!confirm(confirmMsg)) return;
-    
+
     try {
         const res = await fetch(`${API_URL}/admin/loans/${loanId}/`, {
             method: 'PUT',
@@ -940,9 +940,9 @@ async function handleLoanAction(loanId, action) {
             },
             body: JSON.stringify({ action })
         });
-        
+
         const result = await res.json();
-        
+
         if (res.ok) {
             alert(result.message);
             loadAdminLoans('all');
@@ -960,6 +960,6 @@ function filterAdminLoans(status) {
         btn.classList.remove('active');
     });
     event.target.classList.add('active');
-    
+
     loadAdminLoans(status);
 }
